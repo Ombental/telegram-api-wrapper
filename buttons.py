@@ -1,13 +1,7 @@
-class KeyBoardButton:
+from dataclasses import dataclass, field
 
-    @classmethod
-    def require_login(cls):
-        return {
-            'one_time_keyboard': True,
-            'keyboard': [[
-                {
-                    'request_contact': True,
-                    'text': 'הזדהות'
-                }
-            ]]
-        }
+
+@dataclass
+class InlineButton:
+    text: str = field(init=True)
+    callback_data: str | int = field(init=True)

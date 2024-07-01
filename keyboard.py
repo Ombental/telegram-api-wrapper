@@ -2,22 +2,13 @@ import datetime
 import json
 from typing import Set
 
+from buttons import InlineButton
+
 
 # mostly taken from - https://github.com/python-telegram-bot/python-telegram-bot/blob/master/telegram/_telegramobject.py
 
-class ReplyKeyboardMarkup:
-    __slots__ = (
-        "keyboard",
-        "one_time_keyboard",
-    )
 
-    def __init__(self, keyboard, one_time_keyboard: bool = False):
-        self.keyboard = tuple(
-            tuple({"text": button} if isinstance(button, str) else button for button in row)
-            for row in keyboard
-        )
-        self.one_time_keyboard = one_time_keyboard
-
+class BaseKeyboardMarkup:
     def _get_attrs(self):
         data = {}
 
@@ -51,7 +42,9 @@ class ReplyKeyboardMarkup:
                     elif isinstance(item, (tuple, list)):
                         val.append(
                             [
-                                i.to_dict(recursive=recursive) if hasattr(i, "to_dict") else i
+                                i.to_dict(recursive=recursive)
+                                if hasattr(i, "to_dict")
+                                else i
                                 for i in item
                             ]
                         )
@@ -68,3 +61,35 @@ class ReplyKeyboardMarkup:
         # Effectively "unpack" api_kwargs into `out`:
         out.update(out.pop("api_kwargs", {}))  # type: ignore[call-overload]
         return out
+
+
+class ReplyKeyboardMarkup(BaseKeyboardMarkup):
+    __slots__ = (
+        "keyboard",
+        "one_time_keyboard",
+    )
+
+    def __init__(self, keyboard, one_time_keyboard: bool = False):
+        self.keyboard = tuple(
+            tuple(
+                {"text": button} if isinstance(button, str) else button
+                for button in row
+            )
+            for row in keyboard
+        )
+        self.one_time_keyboard = one_time_keyboard
+
+
+class InlineKeyboardMarkup(BaseKeyboardMarkup):
+    __slots__ = ("inline_keyboard",)
+
+    def __init__(self, keyboard: list[list[InlineButton]]):
+        self.inline_keyboard = tuple(
+            tuple(
+                {"text": button.text, "callback_data": button.callback_data}
+                if isinstance(button, InlineButton)
+                else button
+                for button in row
+            )
+            for row in keyboard
+        )
