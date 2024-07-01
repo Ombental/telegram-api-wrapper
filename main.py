@@ -1,3 +1,7 @@
+import json
+import os
+
+from dotenv import load_dotenv
 from flask import Flask, request
 
 from bot import Bot
@@ -35,4 +39,12 @@ def telegram_bot():
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8080, debug=True)
+    # app.run(host="0.0.0.0", port=8080, debug=True)
+    load_dotenv()
+    if not os.path.exists(Bot.UPDATE_FILE_NAME):
+        with open(Bot.UPDATE_FILE_NAME, "w") as f:
+            json.dump({
+                "offset": 1,
+            }, f, indent=4)
+    update = Bot.get_single_update()
+    print(update)

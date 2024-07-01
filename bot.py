@@ -27,11 +27,12 @@ class Bot:
     SEND_MESSAGE = "sendMessage"
     ANSWER_CALLBACK_QUERY = "answerCallbackQuery"
     EDIT_MESSAGE_TEXT = "editMessageText"
+    GET_UPDATES = "getUpdates"
+
+    UPDATE_FILE_NAME = "update_offset.json"
 
     def __init__(self, message, storage: str = "storage.json"):
-        self.base_url = (
-            f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
-        )
+        self.base_url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
         self.storage = storage
         self._load_state_from_storage()
         update_id = message.get("update_id")
@@ -121,3 +122,21 @@ class Bot:
             requests.post(api_url, json=data)
         except Exception as e:
             print(e)
+
+    @classmethod
+    def get_single_update(cls):
+        api_url = urljoin(f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/", cls.GET_UPDATES)
+        with open(cls.UPDATE_FILE_NAME, "r") as f:
+            states = json.load(f)
+            latest_offset = int(states["offset"])
+        data = {"limit": 1, "offset": latest_offset}
+        response = requests.post(api_url, json=data)
+        res_data = response.json()
+        result = res_data["result"]
+        if result:
+            result = result[0]
+            with open(cls.UPDATE_FILE_NAME, "w") as f:
+                json.dump({
+                    "offset": result["update_id"] + 1,
+                }, f, indent=4)
+            return result
