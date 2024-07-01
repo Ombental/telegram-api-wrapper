@@ -2,12 +2,16 @@ import json
 import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from time import sleep
 from typing import Optional, Union
 from urllib.parse import urljoin
 
 import requests
+from dotenv import load_dotenv
 
 from keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
+
+load_dotenv()
 
 
 @dataclass
@@ -87,9 +91,9 @@ class Bot:
             self._update_state(0)
 
     def send_message(
-        self,
-        text,
-        rmarkup: Optional[Union[ReplyKeyboardMarkup, InlineKeyboardMarkup]] = None,
+            self,
+            text,
+            rmarkup: Optional[Union[ReplyKeyboardMarkup, InlineKeyboardMarkup]] = None,
     ):
         api_url = urljoin(self.base_url, self.SEND_MESSAGE)
         try:
@@ -103,7 +107,7 @@ class Bot:
             print(e)
 
     def edit_inline_message(
-        self, text: Optional[str] = None, rmarkup: Optional[InlineKeyboardMarkup] = None
+            self, text: Optional[str] = None, rmarkup: Optional[InlineKeyboardMarkup] = None
     ):
         if not self.is_callback_query:
             raise ValueError("edit_inline_message called without callback query")
@@ -125,6 +129,12 @@ class Bot:
 
     @classmethod
     def get_single_update(cls):
+        sleep(1)
+        if not os.path.exists(cls.UPDATE_FILE_NAME):
+            with open(cls.UPDATE_FILE_NAME, "w") as f:
+                json.dump({
+                    "offset": 1,
+                }, f, indent=4)
         api_url = urljoin(f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/", cls.GET_UPDATES)
         with open(cls.UPDATE_FILE_NAME, "r") as f:
             states = json.load(f)

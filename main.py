@@ -1,19 +1,9 @@
-import json
-import os
-
-from dotenv import load_dotenv
-from flask import Flask, request
-
 from bot import Bot
 from buttons import InlineButton
 from keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
-app = Flask(__name__)
 
-
-@app.route("/", methods=["POST"])
-def telegram_bot():
-    data = request.get_json()
+def telegram_bot(data):
     bot = Bot(data)
     if bot.is_callback_query:
         if bot.callback_query_data == "123":
@@ -39,12 +29,8 @@ def telegram_bot():
 
 
 if __name__ == "__main__":
-    # app.run(host="0.0.0.0", port=8080, debug=True)
-    load_dotenv()
-    if not os.path.exists(Bot.UPDATE_FILE_NAME):
-        with open(Bot.UPDATE_FILE_NAME, "w") as f:
-            json.dump({
-                "offset": 1,
-            }, f, indent=4)
-    update = Bot.get_single_update()
-    print(update)
+    while True:
+        update = Bot.get_single_update()
+        print(update)
+        if update:
+            telegram_bot(update)
