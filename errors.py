@@ -1,0 +1,2 @@
+class BotUpdateOrderError(Exception):
+    pass
