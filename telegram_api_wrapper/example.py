@@ -16,14 +16,17 @@ def telegram_bot(data):
             bot.edit_inline_message("this is None")
     else:
         if bot.message_text == "/start":
-            reply_keyboard = [["/help"], ["/woot"]]
+            reply_keyboard = [["/help"], ["/woot"], ["/previous"]]
             keyboard = ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True)
             bot.send_message("Pick & Choose", keyboard)
         elif bot.message_text == "/woot":
             reply_keyboard = [[InlineButton("woa", 123), InlineButton("awww", 3)]]
             keyboard = InlineKeyboardMarkup(reply_keyboard)
             bot.send_message("Pick & Choose", keyboard)
+        elif bot.message_text == "/previous":
+            bot.send_message(f"Previous message: {bot.context.get('previous_message')}")
         else:
+            bot.update_context({"previous_message": bot.message_text})
             bot.send_message(f"Echo: {bot.message_text}")
     return "OK"
 

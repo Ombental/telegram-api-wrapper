@@ -1,5 +1,4 @@
 .env
 .idea/
 __pycache__/
-storage.json
-update_offset.json
+*.json

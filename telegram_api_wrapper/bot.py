@@ -34,10 +34,12 @@ class Bot:
     GET_UPDATES = "getUpdates"
 
     UPDATE_FILE_NAME = "update_offset.json"
+    CHAT_KEY_NAME = "chats"
 
-    def __init__(self, message, storage: str = "storage.json"):
+    def __init__(self, message, storage: str = "storage.json", context_storage: str = "context.json"):
         self.base_url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
         self.storage = storage
+        self.context_storage = context_storage
         self._load_state_from_storage()
         update_id = message.get("update_id")
         # if self.latest_update_id > update_id:
@@ -58,21 +60,34 @@ class Bot:
         self.chat_id = message["chat"]["id"]
         self.message_text = message.get("text", "")
         self.message_id = message["message_id"]
-        self._load_chat_context()
+        self.context = self._load_chat_context()
 
     def update_context(self, context_update):
         """
                     use chat id to set to a json file prolly
                     need to think about race conditions
         """
-        raise NotImplementedError
+        with open(self.context_storage, "r") as f:
+            data = json.load(f)
+
+        if self.CHAT_KEY_NAME not in data:
+            data[self.CHAT_KEY_NAME] = {}
+
+        self.context.update(context_update)
+        data[self.CHAT_KEY_NAME][str(self.chat_id)] = self.context
+        with open(self.context_storage, "w") as f:
+            json.dump(data, f)
 
     def _load_chat_context(self):
         """
             use chat id to get from a json file prolly
             need to think about race conditions
         """
-        raise NotImplementedError
+        if not os.path.exists(self.context_storage):
+            with open(self.context_storage, "w") as f:
+                json.dump({}, f)
+        with open(self.context_storage, "r") as f:
+            return json.load(f).get(self.CHAT_KEY_NAME, {}).get(str(self.chat_id), {})
 
     def _answer_callback(self):
         api_url = urljoin(self.base_url, self.ANSWER_CALLBACK_QUERY)
