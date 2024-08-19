@@ -2,7 +2,7 @@ import datetime
 import json
 from typing import Set
 
-from buttons import InlineButton
+from telegram_api_wrapper.buttons import InlineButton
 
 
 # mostly taken from - https://github.com/python-telegram-bot/python-telegram-bot/blob/master/telegram/_telegramobject.py

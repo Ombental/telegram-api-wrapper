@@ -9,7 +9,7 @@ from urllib.parse import urljoin
 import requests
 from dotenv import load_dotenv
 
-from keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram_api_wrapper.keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 load_dotenv()
 
@@ -58,6 +58,21 @@ class Bot:
         self.chat_id = message["chat"]["id"]
         self.message_text = message.get("text", "")
         self.message_id = message["message_id"]
+        self._load_chat_context()
+
+    def update_context(self, context_update):
+        """
+                    use chat id to set to a json file prolly
+                    need to think about race conditions
+        """
+        raise NotImplementedError
+
+    def _load_chat_context(self):
+        """
+            use chat id to get from a json file prolly
+            need to think about race conditions
+        """
+        raise NotImplementedError
 
     def _answer_callback(self):
         api_url = urljoin(self.base_url, self.ANSWER_CALLBACK_QUERY)

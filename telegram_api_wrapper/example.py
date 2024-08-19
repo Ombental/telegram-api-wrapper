@@ -1,6 +1,6 @@
-from bot import Bot
-from buttons import InlineButton
-from keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
+from telegram_api_wrapper import Bot
+from telegram_api_wrapper.buttons import InlineButton
+from telegram_api_wrapper.keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 
 def telegram_bot(data):
