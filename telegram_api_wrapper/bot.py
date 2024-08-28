@@ -6,16 +6,18 @@ from time import sleep
 from typing import Optional, Union
 from urllib.parse import urljoin
 
+import boto3
 import requests
-from dotenv import load_dotenv
+from botocore.exceptions import ClientError
 
 from telegram_api_wrapper.keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
-
-load_dotenv()
 
 
 @dataclass
 class Bot:
+    """
+    Local and Lambda ready
+    """
     base_url: str
     storage: str
     latest_update_id: int
@@ -36,17 +38,17 @@ class Bot:
     UPDATE_FILE_NAME = "update_offset.json"
     CHAT_KEY_NAME = "chats"
 
-    def __init__(self, message, storage: str = "storage.json", context_storage: str = "context.json"):
+    def __init__(self, message, storage, context_storage):
         self.base_url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
-        self.storage = storage
-        self.context_storage = context_storage
+        self.storage = storage if storage else os.environ.get("TELEGRAM_BOT_STORAGE", "storage.json")
+        self.context_storage = context_storage if context_storage else os.environ.get(
+            "TELEGRAM_BOT_CONTEXT_STORAGE", "context.json")
+        self.file_based_backend = bool(os.environ.get("DYNAMO_DB_BASED_BACKEND", True))
         self._load_state_from_storage()
         update_id = message.get("update_id")
-        # if self.latest_update_id > update_id:
-        #     raise BotUpdateOrderError(
-        #         f"{self.latest_update_id} is greater than the latest update id - {update_id}"
-        #     )
+
         self._update_state(update_id)
+
         if "message" in message:
             message = message["message"]
         elif "callback_query" in message:
@@ -56,6 +58,7 @@ class Bot:
             self.callback_query_data = callback_query["data"]
             self.callback_query_id = callback_query["id"]
             self._answer_callback()
+
         self.sender_name = message["from"].get("first_name", "")
         self.chat_id = message["chat"]["id"]
         self.message_text = message.get("text", "")
@@ -67,22 +70,51 @@ class Bot:
                     use chat id to set to a json file prolly
                     need to think about race conditions
         """
-        with open(self.context_storage, "r") as f:
-            data = json.load(f)
+        if not self.file_based_backend:
+            table = boto3.resource('dynamodb').Table(self.context_storage)
+            self.context.update(context_update)
 
-        if self.CHAT_KEY_NAME not in data:
-            data[self.CHAT_KEY_NAME] = {}
+            item = {
+                'chat_id': str(self.chat_id),
+                'context': json.dumps(self.context)
+            }
 
-        self.context.update(context_update)
-        data[self.CHAT_KEY_NAME][str(self.chat_id)] = self.context
-        with open(self.context_storage, "w") as f:
-            json.dump(data, f)
+            try:
+                response = table.put_item(
+                    Item=item,
+                    ConditionExpression='attribute_exists(chat_id)'
+                )
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
+                    # Handle the case where the item doesn't exist
+                    response = table.put_item(Item=item)
+                    print(response)
+        else:
+            with open(self.context_storage, "r") as f:
+                data = json.load(f)
+
+            if self.CHAT_KEY_NAME not in data:
+                data[self.CHAT_KEY_NAME] = {}
+
+            self.context.update(context_update)
+            data[self.CHAT_KEY_NAME][str(self.chat_id)] = self.context
+            with open(self.context_storage, "w") as f:
+                json.dump(data, f)
 
     def _load_chat_context(self):
         """
             use chat id to get from a json file prolly
             need to think about race conditions
         """
+        if not self.file_based_backend:
+            table = boto3.resource('dynamodb').Table(self.context_storage)
+            response = table.get_item(
+                Key={'chat_id': str(self.chat_id)}
+            )
+
+            item = response.get('Item', {})
+            context = json.loads(item.get('context', '{}'))
+            return context
         if not os.path.exists(self.context_storage):
             with open(self.context_storage, "w") as f:
                 json.dump({}, f)
@@ -98,27 +130,57 @@ class Bot:
             print(e)
 
     def _update_state(self, update_id):
-        with open(self.storage, "w") as f:
-            update_time = datetime.utcnow()
-            d = {
-                "latest_update_id": update_id,
-                "latest_update_time": update_time.timestamp(),
+        update_time = datetime.utcnow()
+        if not self.file_based_backend:
+            table = boto3.resource('dynamodb').Table(self.storage)
+            item = {
+                'name': 'last_update_time',
+                'latest_update_id': update_id,
+                'latest_update_time': update_time.timestamp(),
             }
-            json.dump(d, f, indent=4)
+            table.put_item(Item=item)
             self.latest_update_id = update_id
             self.latest_update_time = update_time
+        else:
+            with open(self.storage, "w") as f:
+                d = {
+                    "latest_update_id": update_id,
+                    "latest_update_time": update_time.timestamp(),
+                }
+                json.dump(d, f, indent=4)
+                self.latest_update_id = update_id
+                self.latest_update_time = update_time
 
     def _load_state_from_storage(self):
-        if not os.path.exists(self.storage):
-            self._update_state(0)
-        with open("storage.json", "r") as storage:
-            states = json.load(storage)
-            self.latest_update_id = states["latest_update_id"]
-            self.latest_update_time = datetime.fromtimestamp(
-                states["latest_update_time"]
+        if not self.file_based_backend:
+            table = boto3.resource('dynamodb').Table(self.storage)
+            response = table.get_item(
+                Key={'name': 'last_update_time'}  # Assuming chat_id is set elsewhere
             )
-        if self.latest_update_time + timedelta(days=7) < datetime.utcnow():
-            self._update_state(0)
+
+            # Handle the case where no record exists
+            if 'Item' not in response:
+                self._update_state(0)
+                return
+
+            item = response['Item']
+            self.latest_update_id = item['latest_update_id']
+            self.latest_update_time = datetime.fromtimestamp(item['latest_update_time'])
+
+            # Check for outdated state and update if necessary
+            if self.latest_update_time + timedelta(days=7) < datetime.utcnow():
+                self._update_state(0)
+        else:
+            if not os.path.exists(self.storage):
+                self._update_state(0)
+            with open("storage.json", "r") as storage:
+                states = json.load(storage)
+                self.latest_update_id = states["latest_update_id"]
+                self.latest_update_time = datetime.fromtimestamp(
+                    states["latest_update_time"]
+                )
+            if self.latest_update_time + timedelta(days=7) < datetime.utcnow():
+                self._update_state(0)
 
     def send_message(
             self,
@@ -159,6 +221,9 @@ class Bot:
 
     @classmethod
     def get_single_update(cls):
+        """
+        We assume this is a "local only" type of call, so no handling of "non file backend"
+        """
         sleep(1)
         if not os.path.exists(cls.UPDATE_FILE_NAME):
             with open(cls.UPDATE_FILE_NAME, "w") as f:
