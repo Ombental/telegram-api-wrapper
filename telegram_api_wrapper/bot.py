@@ -43,7 +43,7 @@ class Bot:
         self.storage = storage if storage else os.environ.get("TELEGRAM_BOT_STORAGE", "storage.json")
         self.context_storage = context_storage if context_storage else os.environ.get(
             "TELEGRAM_BOT_CONTEXT_STORAGE", "context.json")
-        self.file_based_backend = bool(os.environ.get("DYNAMO_DB_BASED_BACKEND", True))
+        self.file_based_backend = not bool(os.environ.get("DYNAMO_DB_BASED_BACKEND", False))
         self._load_state_from_storage()
         update_id = message.get("update_id")
 
