@@ -10,7 +10,7 @@ packages = [{include = "telegram_api_wrapper"}]
 python = "^3.11"
 requests = "^2.32.3"
 python-dotenv = "^1.0.1"
-boto3 = "^1.35.7"
+boto3 = "^1.35.18"
 
 
 [build-system]

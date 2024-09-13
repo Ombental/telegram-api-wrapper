@@ -1,7 +1,7 @@
 import json
 import os
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from time import sleep
 from typing import Optional, Union
 from urllib.parse import urljoin
@@ -10,6 +10,7 @@ import boto3
 import requests
 from botocore.exceptions import ClientError
 
+from telegram_api_wrapper.calendar_util import _picked_year, _process_calendar_step, _send_year_choices
 from telegram_api_wrapper.keyboard import InlineKeyboardMarkup, ReplyKeyboardMarkup
 
 
@@ -28,6 +29,8 @@ class Bot:
     message_id: str
     callback_query_id: int
     is_callback_query: bool = False
+    is_picking_date: bool = False
+    finished_picking_date: bool = False
     callback_query_data: Optional[str] = None
 
     SEND_MESSAGE = "sendMessage"
@@ -37,8 +40,10 @@ class Bot:
 
     UPDATE_FILE_NAME = "update_offset.json"
     CHAT_KEY_NAME = "chats"
+    IS_DATE_PICKING_CONTEXT_PREFIX = "is_picking_date_for_"
+    PICKED_DATE_CONTEXT_PREFIX = "picked_date_for_"
 
-    def __init__(self, message, storage, context_storage):
+    def __init__(self, message, storage=None, context_storage=None):
         self.base_url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
         self.storage = storage if storage else os.environ.get("TELEGRAM_BOT_STORAGE", "storage.json")
         self.context_storage = context_storage if context_storage else os.environ.get(
@@ -64,6 +69,22 @@ class Bot:
         self.message_text = message.get("text", "")
         self.message_id = message["message_id"]
         self.context = self._load_chat_context()
+
+        self.is_picking_date = self.is_callback_query and self.context.get(
+            f"{self.IS_DATE_PICKING_CONTEXT_PREFIX}{self.message_id}",
+            False)
+
+        if self.is_callback_query and _picked_year(str(self.callback_query_data)):
+            self.update_context({
+                f"{self.IS_DATE_PICKING_CONTEXT_PREFIX}{self.message_id}": True,
+                f"{self.PICKED_DATE_CONTEXT_PREFIX}{self.message_id}": {}
+            })
+            self.is_picking_date = True
+
+        if self.is_picking_date:
+            picked_date_parts = self.context.get(f"{self.PICKED_DATE_CONTEXT_PREFIX}{self.message_id}", {})
+            self.finished_picking_date = all(
+                part in picked_date_parts and picked_date_parts[part] for part in ["day", "month", "year"])
 
     def update_context(self, context_update):
         """
@@ -245,3 +266,21 @@ class Bot:
                     "offset": result["update_id"] + 1,
                 }, f, indent=4)
             return result
+
+    def start_picking_date(self, message_text: str = "בחירת תאריך"):
+        keyboard = _send_year_choices()
+        self.send_message(message_text, keyboard)
+
+    def continue_picking_date(self):
+        # if this is the last pick stage
+        if self.finished_picking_date:
+            # should we raise error?
+            return
+        _process_calendar_step(self)
+
+    def get_picked_date(self):
+        if self.is_picking_date and self.finished_picking_date:
+            return date(**{key: int(value) for key, value in
+                                    self.context[f"{self.PICKED_DATE_CONTEXT_PREFIX}{self.message_id}"].items()})
+        # This means that date shouldn't be available yet
+        return False
