@@ -20,9 +20,6 @@ class Bot:
     Local and Lambda ready
     """
     base_url: str
-    storage: str
-    latest_update_id: int
-    latest_update_date: datetime
     sender_name: str
     chat_id: int
     message_text: str
@@ -43,16 +40,11 @@ class Bot:
     IS_DATE_PICKING_CONTEXT_PREFIX = "is_picking_date_for_"
     PICKED_DATE_CONTEXT_PREFIX = "picked_date_for_"
 
-    def __init__(self, message, storage=None, context_storage=None):
+    def __init__(self, message, context_storage=None):
         self.base_url = f"https://api.telegram.org/bot{os.environ['TELEGRAM_API_TOKEN']}/"
-        self.storage = storage if storage else os.environ.get("TELEGRAM_BOT_STORAGE", "storage.json")
         self.context_storage = context_storage if context_storage else os.environ.get(
             "TELEGRAM_BOT_CONTEXT_STORAGE", "context.json")
         self.file_based_backend = not bool(os.environ.get("DYNAMO_DB_BASED_BACKEND", False))
-        self._load_state_from_storage()
-        update_id = message.get("update_id")
-
-        self._update_state(update_id)
 
         if "message" in message:
             message = message["message"]
@@ -149,59 +141,6 @@ class Bot:
             requests.post(api_url, json=data)
         except Exception as e:
             print(e)
-
-    def _update_state(self, update_id):
-        update_time = datetime.utcnow()
-        if not self.file_based_backend:
-            table = boto3.resource('dynamodb').Table(self.storage)
-            item = {
-                'name': 'last_update_time',
-                'latest_update_id': update_id,
-                'latest_update_time': update_time.timestamp(),
-            }
-            table.put_item(Item=item)
-            self.latest_update_id = update_id
-            self.latest_update_time = update_time
-        else:
-            with open(self.storage, "w") as f:
-                d = {
-                    "latest_update_id": update_id,
-                    "latest_update_time": update_time.timestamp(),
-                }
-                json.dump(d, f, indent=4)
-                self.latest_update_id = update_id
-                self.latest_update_time = update_time
-
-    def _load_state_from_storage(self):
-        if not self.file_based_backend:
-            table = boto3.resource('dynamodb').Table(self.storage)
-            response = table.get_item(
-                Key={'name': 'last_update_time'}  # Assuming chat_id is set elsewhere
-            )
-
-            # Handle the case where no record exists
-            if 'Item' not in response:
-                self._update_state(0)
-                return
-
-            item = response['Item']
-            self.latest_update_id = item['latest_update_id']
-            self.latest_update_time = datetime.fromtimestamp(item['latest_update_time'])
-
-            # Check for outdated state and update if necessary
-            if self.latest_update_time + timedelta(days=7) < datetime.utcnow():
-                self._update_state(0)
-        else:
-            if not os.path.exists(self.storage):
-                self._update_state(0)
-            with open("storage.json", "r") as storage:
-                states = json.load(storage)
-                self.latest_update_id = states["latest_update_id"]
-                self.latest_update_time = datetime.fromtimestamp(
-                    states["latest_update_time"]
-                )
-            if self.latest_update_time + timedelta(days=7) < datetime.utcnow():
-                self._update_state(0)
 
     def send_message(
             self,
