@@ -88,20 +88,12 @@ class Bot:
             self.context.update(context_update)
 
             item = {
-                'chat_id': str(self.chat_id),
+                'ChatID': str(self.chat_id),
                 'context': json.dumps(self.context)
             }
-
-            try:
-                response = table.put_item(
-                    Item=item,
-                    ConditionExpression='attribute_exists(chat_id)'
-                )
-            except ClientError as e:
-                if e.response['Error']['Code'] == 'ConditionalCheckFailedException':
-                    # Handle the case where the item doesn't exist
-                    response = table.put_item(Item=item)
-                    print(response)
+            table.put_item(
+                Item=item
+            )
         else:
             with open(self.context_storage, "r") as f:
                 data = json.load(f)
@@ -122,11 +114,11 @@ class Bot:
         if not self.file_based_backend:
             table = boto3.resource('dynamodb').Table(self.context_storage)
             response = table.get_item(
-                Key={'chat_id': str(self.chat_id)}
+                Key={'ChatID': str(self.chat_id)}
             )
 
             item = response.get('Item', {})
-            context = json.loads(item.get('context', '{}'))
+            context = json.loads(item.get('context', {}))
             return context
         if not os.path.exists(self.context_storage):
             with open(self.context_storage, "w") as f:
