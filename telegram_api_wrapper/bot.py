@@ -8,6 +8,7 @@ from urllib.parse import urljoin
 
 import boto3
 import requests
+from boto3.dynamodb.conditions import Key
 from botocore.exceptions import ClientError
 
 from telegram_api_wrapper.calendar_util import _picked_year, _process_calendar_step, _send_year_choices
@@ -89,7 +90,7 @@ class Bot:
 
             item = {
                 'ChatID': str(self.chat_id),
-                'context': json.dumps(self.context)
+                'Context': self.context
             }
             table.put_item(
                 Item=item
@@ -113,12 +114,21 @@ class Bot:
         """
         if not self.file_based_backend:
             table = boto3.resource('dynamodb').Table(self.context_storage)
-            response = table.get_item(
-                Key={'ChatID': str(self.chat_id)}
+            response = table.query(
+                KeyConditionExpression=Key('ChatID').eq(str(self.chat_id))
             )
-
-            item = response.get('Item', {})
-            context = json.loads(item.get('context', {}))
+            context = {}
+            if int(response.get("Count", 0)) == 0:
+                item = {
+                    'ChatID': str(self.chat_id),
+                    'Context': {}
+                }
+                table.put_item(
+                    Item=item
+                )
+            else:
+                items = response.get('Items', [{}])
+                context = items[0].get('Context', {})
             return context
         if not os.path.exists(self.context_storage):
             with open(self.context_storage, "w") as f:
